@@ -1,0 +1,703 @@
+---
+title: "mamut"
+author: "" 
+date: "`r Sys.time()`"
+output: 
+  flexdashboard::flex_dashboard:
+      css: css/styles.css
+---
+
+```{r setup, include=FALSE}
+options(scipen = 999999)
+knitr::opts_chunk$set(echo = TRUE)
+source("functions.r")
+library(tidymodels)
+library(modeltime)
+library(tidyverse)
+library(lubridate)
+library(timetk)
+library(ggExtra)
+settings <- list() 
+settings$ensembleModels <- c("ARIMA", "ETS", "STL", "ARIMA LogTr")
+settings$packages <- list("tidyverse", "lubridate", "formattable",
+                          "flexdashboard")
+lapply(settings$packages, library, character.only = TRUE)
+ # get the most recent file
+#prepareData <- mmtRender$discoverData()
+theme_set(theme_light())
+```
+
+```{r settings, include=FALSE}
+mmtData <- readRDS("render data/mmt.rds")
+stock <- mmtData$stock
+data <- mmtData$data
+stt <- mmtData$stats
+validation <- mmtData$validation
+tst2 <- mmtData$tst2
+tmp_clean <- mmtData$tmp_clean
+dt1 <- mmtData$dt1
+predicted_price_change <- mmtData$predicted_price_change
+tmp_sp3 <- mmtData$tmp_sp3
+xgbData <- mmtData$xgbData
+dt2 <- mmtData$dt2
+scoring_prob <- mmtData$scoring_prob
+scores_fix_p <- mmtData$scores_fix_p
+tst <- mmtData$tst
+tmp_formattable <- mmtData$tmp_formattable
+tmp002 <- mmtData$tmp002
+stt <- mmtData$stt
+# tmp_formattable <- stt$summary$periodic %>% 
+#   renameSummary() %>% 
+#   rename(`Analyzed period: days back` = last_n_days)
+improvement_formatter <- 
+  formatter("span", 
+            style = x ~ style(
+              font.weight = "bold", 
+              color = ifelse(x > 0, "#7EDB76",
+                             ifelse(x < 0, "#F94A2E", 
+                                    "black"))))
+dtt1 <-   dt1 %>% 
+    dplyr::select(-open, -high) %>% 
+    mutate(`Next day price` = close + `Validated change [$]`) %>% 
+    rename(`Day close price` = close)
+prov_det <- dt1 %>% 
+  mutate(date = as.Date(substr(Time, 1, 10))) %>% 
+  group_by(date) %>% 
+  summarise(provider_names = paste(unique(`Text provider`), collapse = ", ")) %>% 
+  ungroup()
+```
+
+
+Intro {data-icon="fa-code"}
+=====================================     
+
+Column 4{data-width=100}
+-------------------------------------
+
+[link to SignalsHub](https://mamut.shinyapps.io/providers/)
+<br>
+<font color = "#808080">
+<br>
+Report ID:
+<br>
+`r stock$render$reportName`
+<br>
+`r stock$render$dataStamp`
+<br>
+<br>
+Current version:
+<br>
+[link](https://viewer.diagrams.net/?highlight=00FF00&edit=_blank&layers=1&nav=1#G1Y-3bgTBvuMLlO9rYtcEYTWuedV2wmzJ7)
+</font>
+
+
+Column 4 {.tabset}
+-------------------------------------
+
+### Version 1.0.0
+<br>
+<center>
+**`r stock$descriptions$name`**
+<br>
+** `r Sys.time()` **
+
+### Evaluation: Predicted price changes [$]
+
+```{r predicted price changes , echo=FALSE, warning=FALSE, message=FALSE}
+plotly::ggplotly(
+tst2  %>% 
+  group_by(date) %>% 
+  summarise(`Signals buy` = sum(signals_up),
+            `Signals sell` = sum(signals_down),
+            `Total articles` = n_distinct(`Text title`),
+            `Price change [$ sum] end of day` = unique(`Sum of intraday scores`),
+            `Price change [$ sum] end of next day` = unique(`Sum of next day scores`),
+            `Mean change` = round(mean(`Sum of scores`))) %>% 
+  ggplot(aes(x = date)) +
+  geom_boxplot(aes(y =  `Mean change` )) +
+  geom_point(aes(y =  `Mean change` ,
+                 color = `Mean change`)) +
+  geom_line(aes(y =  `Price change [$ sum] end of day`), size = .03) +
+  geom_line(aes(y =  `Price change [$ sum] end of next day`), size = .03) +
+  scale_colour_gradient2(
+  low = "red",
+  mid = "#9C9C9C",
+  high = "green",
+  midpoint = 0,
+  space = "Lab",
+  na.value = "grey50",
+  guide = "colourbar",
+  aesthetics = "colour"
+)+
+    labs(y = "$",
+       x = "Date") +
+  theme(legend.position="none")
+)
+```
+
+### Available articles
+
+```{r articles, echo = F, warning=F, message=F}
+# table with articles
+DT::datatable(tmp_clean ,
+              filter = "top",
+  rownames = FALSE)
+```
+
+### Financial statement
+
+```{r fin statement, echo=FALSE,  warning=FALSE, message=FALSE}
+## Data summary table 3 - financial statements
+DT::datatable(stt$financial_statement$yahoo,
+   rownames = FALSE,
+  extensions = "Buttons",
+  options = list(
+    dom = "t",
+    buttons = c("csv", "excel"),
+    pageLength = nrow(stt$financial_statement$yahoo)
+  )) 
+```
+
+
+`r stock$descriptions$name` {data-icon="fa-at"}
+===================================== 
+  
+Column {data-width=200}
+-------------------------------------
+
+### Last prices
+```{r Prices1, echo=FALSE, warning=FALSE, message=FALSE}
+# stt$tiingo$intraday
+tng_rpl <-   stt$intraday_df$av %>% 
+  rename(date = Date_time,
+         close = Close,
+         high = High,
+         low = Low) %>% 
+  mutate(symbol = mmtData$settings$descriptions$stock)
+formattable(
+stt$intraday_df$tiingo %>% tail(3) %>% 
+    arrange(desc(date)) %>% 
+    dplyr::select(-high,-low) %>% 
+    dplyr::select(date, symbol, everything()) %>% 
+    rename(`Last prices` = symbol,
+           Time = date),
+  align = c("r", rep("l",5)),
+            list(Time = formatter("span",
+                                           style = ~ style(color = "black",
+                                                           font.weight = "bold"))
+))
+```
+    
+### Last signals
+```{r signalslast1, echo=FALSE, warning=FALSE, message=FALSE}
+formattable(
+  dt1 %>% 
+    head(3) %>% 
+    arrange(desc(Time)) %>% 
+    dplyr::select(Time, `NLP Signal`, `NLP Signal price`, `Text provider`),
+  align = c("r", rep("l",6)),
+            list(Time = formatter("span", 
+                                 style = ~ style(color = "black", 
+                                                 font.weight = "bold")),
+               `NLP Signal`  = improvement_formatter)
+)
+```
+          
+### NLP scores (validated price changes)
+
+```{r accuracy, echo=FALSE, warning=FALSE, message=FALSE}
+gauge(predicted_price_change, min = 0, max = 100, symbol = '%', 
+      gaugeSectors(
+  success = c(65, 100), warning = c(30, 64), danger = c(0, 29)
+))
+```
+
+Column {.tabset}
+-------------------------------------
+
+### Smart Bubbles
+```{r signals counter, echo = F, warning=F, message=F}
+plotly::ggplotly(
+tmp_sp3 %>% 
+  mutate(
+#  `Next price` = ifelse(!is.na(price_change), 
+#                               close + price_change,
+#                               xgbData$forecasts$actual),
+         `NLP signals` = signals_down + signals_up) %>% 
+  rename(`Price change [% validated]` = price_change_perc,
+         `Day close price` = close) %>% 
+  ggplot(aes(x = date)) +
+    geom_line(aes(y = low), color = "#FFC9B2", .alpha = .3)+
+  geom_line(aes(y = high), color = "#D7FFC8", alpha = .5)+
+  geom_point(aes(y = `Day close price`, 
+                 size = `NLP signals`, 
+                 label = providers,
+                 #label2 = `Next price`,
+                 label3 = signals_up,
+                 label4 = signals_down,
+                 color = `Price change [% validated]`)) +
+    geom_line(aes(y = `Day close price`)) +
+  theme(legend.position="none") +
+  labs(title = "",
+       x = "Date",
+       y = "Stock price") +
+scale_colour_gradient2(
+  low = "red",
+  mid = "#9C9C9C",
+  high = "green",
+  midpoint = 0,
+  space = "Lab",
+  na.value = "grey50",
+  guide = "colourbar",
+  aesthetics = "colour"
+) + 
+#  geom_point(aes(x = max(tmp_sp3$date + 1),
+#                 y = xgbData$res)) +
+#  geom_hline(yintercept = xgbData$res, colour = "#F1E4FF", 
+#             linetype='dotted')+
+  #scale_y_continuous(trans='log2') +
+  scale_x_date(limits = c(max(tmp_sp3$date) - 360, max(tmp_sp3$date)))
+)
+```
+
+### Candlestick
+```{r signals2 counter, echo = F, warning=F, message=F}
+stt$daily_df$av %>% 
+  filter(date >= "2019-01-01") %>% 
+  plotly::plot_ly(x = ~date, type="candlestick",
+          open = ~Open, close = ~Close,
+          high = ~High, low = ~Low, 
+          name = "stock price") %>%
+  plotly::layout(title = " ",
+                 xaxis = list(rangeslider = list(visible = F),
+                              #type = "category",
+                              title = "time",
+                              showticklabels = T
+                              ),
+                 yaxis = list(title = "stock price"),
+                 legend = list(orientation = 'h', x = 0.5, y = 1,
+                       xanchor = 'center', yref = 'paper',
+                       font = list(size = 10))) 
+```
+    
+
+
+Natural Language Processing {data-icon="fa-sitemap"}
+=====================================     
+
+
+Column 2{data-width=200}
+-------------------------------------
+
+### `r paste("Last signals:", sum(dt2$Signals))`
+
+```{r tfsignals, echo=FALSE, warning=FALSE, message=FALSE}
+plotly::ggplotly(
+dt2 %>% 
+  mutate(`NLP Signal` = as.factor(`NLP Signal`),
+         `Signal validation` = as.factor(`Signal validation`)) %>% 
+  ggplot(aes(x = `Signal validation`, y = `NLP Signal`)) +
+  geom_point(aes(size =Signals, color = `Validated price change [$]`)) +
+  scale_colour_gradient2(
+  low = "red",
+  mid = "#9C9C9C",
+  high = "green",
+  midpoint = 0,
+  space = "Lab",
+  na.value = "grey50",
+  guide = "colourbar",
+  aesthetics = "colour"
+) +
+  theme(legend.position="none") +
+  labs(title = " ")
+)
+```
+
+
+### NLP scoring probability
+
+```{r accuracy2, echo=FALSE, warning=FALSE, message=FALSE}
+gauge(round(scoring_prob*100,2), min = 0, max = 100, symbol = '%', 
+      gaugeSectors(
+  success = c(65, 100), warning = c(30, 64), danger = c(0, 29)
+))
+```
+
+
+Column 2{.tabset}
+-------------------------------------
+
+### Last signals
+    
+```{r last signals, echo = F, warning=F, message=F}
+formattable(
+dtt1 %>% 
+  dplyr::select(Time, `NLP Signal`, `NLP Signal price`, 
+                `Day close price`, `Next day price`, 
+                `Validated change [$]`, `Validated change [%]`,
+                `Text provider`, url) %>% 
+  rename(`Signal provider` = `Text provider`,
+         Text = url),
+  align = c("r", rep("l",6)),
+            list(Time = formatter("span", 
+                                 style = ~ style(color = "black", 
+                                                 font.weight = "bold")),
+               `NLP Signal`  = improvement_formatter,
+               `NLP Signal price` = stock$imp_formatters$mp,
+`Day close price` = stock$imp_formatters$cc2,
+`Validated change [$]` = improvement_formatter,
+`Next day price` = stock$imp_formatters$cc2,
+`Validated change [%]` = improvement_formatter)
+)
+  
+```
+  
+
+### Singal validation details
+
+```{r signals 3 , echo=FALSE, warning=FALSE, message=FALSE}
+plotly::ggplotly(
+tmp_sp3 %>% 
+  filter(!is.na(signalPrice)) %>% 
+  mutate(signals = signals_up + signals_down,
+         
+         signal_strength_perc = round(
+           round(signals/texts_scanned*100,2)),
+         
+         `Next day close price` = close + price_change,
+         
+         `Change to end of the day [%]` = round((close-                      signalPrice)/signalPrice*100,2)) %>% 
+  
+  mutate(`Change to the end of the next day [%]` = round(
+    (`Next day close price` - signalPrice)/signalPrice*100,2),
+    
+    `Signals day close price` = close) %>% 
+  
+  left_join(prov_det) %>% 
+  ggplot(aes(x = date)) +
+  geom_point(aes(y = `Next day close price`,
+                 color = `Change to the end of the next day [%]`), shape = 15)+
+  geom_point(aes(y = `Signals day close price`, 
+                 color =  `Change to end of the day [%]`,
+                 label = providers), shape = 15) +
+  geom_point(aes(y = signalPrice, 
+                label = provider_names,
+                 # label2 = keywords
+                 ), color = "#E9C213", size = 2.5) +
+  labs(title = " ",
+       y = "Stock Price",
+       x = "Date") +
+  scale_colour_gradient2(
+  low = "red",
+  mid = "#9C9C9C",
+  high = "green",
+  midpoint = 0,
+  space = "Lab",
+  na.value = "grey50",
+  guide = "colourbar",
+  aesthetics = "colour"
+) +
+  theme(legend.position="none") 
+) 
+```
+
+
+### Providers scores
+
+```{r signals summary2 , echo=FALSE, warning=FALSE, message=FALSE}
+tstst <- tst %>% 
+  group_by(`Text provider`) %>% 
+  mutate(`Last mean predicted change [$]` = ifelse(`Provider signals` == max(`Provider signals`), `Mean score`, NA),
+         `Last mean score date` = ifelse(`Provider signals` == max(`Provider signals`), `date`, NA)) %>% 
+  mutate(`Last mean predicted change [$]` = ifelse(`Provider texts` == max(`Provider texts`), `Last mean predicted change [$]`, NA)) %>% 
+  ungroup() 
+plotly::ggplotly(
+tstst %>% 
+  ggplot(aes(x = date)) +
+  #geom_line(aes(y = `Provider intraday mean score`), size = .025) +
+  #geom_line(aes(y = `Provider next day mean score`), size = .025) +
+  #geom_line(aes(y = `Mean score`), size = .2) +
+  #geom_point(aes(x = -`Mean score`, size = `Provider signals`,
+  #               label = `Provider texts`,))+
+  geom_line(aes(y = `Mean score`,
+                 #color = Signal,
+                 label1 = `Next day score`,
+                 label = `Provider texts`,
+                 label2 = `Provider signals`,
+                group = `Text provider`),
+            color = "#796490",
+            linetype = "dotdash") +
+  geom_point(aes(y = `Last mean predicted change [$]`, 
+                 size = `Provider signals`,
+                 color = `Text provider`,
+                 label = `Provider texts`)) +
+  labs(color = "Provider",
+       size = "",
+       y = "Mean predicted price change [$]")
+)
+ 
+```
+
+
+
+<!-- ### Buy data correlations  -->
+<!-- ```{r corrtable, echo=FALSE,  warning=FALSE, message=FALSE} -->
+<!-- tmp_matrix <- tmp_sp3 %>%  -->
+<!--   dplyr::select(signals_up, close, price_change_daily, price_change_perc) %>%  -->
+<!--   mutate(is_up = as.numeric(signals_up > 0)#, -->
+<!--          #is_down = signals_down >0 -->
+<!--          ) %>%  -->
+<!--   filter(!is.na(price_change_perc)) -->
+
+<!-- # tmp_corrs_signals <- cor(tmp_matrix) -->
+<!-- #  -->
+<!-- # corrplot.mixed(round(tmp_corrs_signals ,1),  -->
+<!-- #                lower = "pie", upper = "number",  -->
+<!-- #                tl.pos = "lt", addgrid.col = "white") -->
+
+<!-- GGally::ggpairs(tmp_matrix %>%  -->
+<!--                   mutate(is_up = factor(is_up)),  -->
+<!--                 mapping = ggplot2::aes(colour=is_up)) -->
+
+<!-- rm(tmp_matrix, tmp_corrs_signals) -->
+
+<!-- ``` -->
+
+
+
+<!-- ### Sell data correlations  -->
+
+<!-- ```{r corrtable2, echo=FALSE,  warning=FALSE, message=FALSE} -->
+<!-- tmp_matrix <- tmp_sp3 %>%  -->
+<!--   dplyr::select(signals_down, close, price_change_daily, price_change_perc) %>%  -->
+<!--   mutate(#is_up = signals_up > 0, -->
+<!--          is_down = as.numeric(signals_down >0) -->
+<!--          ) -->
+
+<!-- # tmp_corrs_signals <- cor(tmp_matrix) -->
+<!-- #  -->
+<!-- # corrplot.mixed(round(tmp_corrs_signals ,1),  -->
+<!-- #                lower = "pie", upper = "number",  -->
+<!-- #                tl.pos = "lt", addgrid.col = "white") -->
+
+<!-- GGally::ggpairs(tmp_matrix %>%  -->
+<!--                   mutate(is_down = factor(is_down)),  -->
+<!--                 mapping = ggplot2::aes(colour=is_down), -->
+<!--                 lower = list(continuous = GGally::wrap("smooth", alpha = 0.3, size=0.1)), -->
+<!--                 title = " ") -->
+<!-- rm(tmp_matrix, tmp_corrs_signals) -->
+
+<!-- ``` -->
+
+
+
+Price models {data-icon="fa-calculator"}
+===================================== 
+
+
+Column 3{data-width=300}
+-------------------------------------
+
+### Periodic stats
+
+```{r Prices2, echo=FALSE, warning=FALSE, message=FALSE}
+formattable(
+  tmp_formattable %>% 
+    dplyr::select(`Analyzed period: days back`,
+                  `Mean price`,
+                  `High price level`,
+                  `Low price level`),
+  align = c("r", rep("l",3)),
+            list(`Analyzed period: days back` = formatter("span", 
+                                 style = ~ style(color = "black", 
+                                                 font.weight = "bold")),
+                 `Mean price`  = stock$imp_formatters$mp,
+                 `High price level` = stock$imp_formatters$hp,
+                 `Low price level` = stock$imp_formatters$lp)
+)
+formattable(
+  tmp_formattable%>% 
+    dplyr::select(`Analyzed period: days back`,
+                  `Median price`,
+                  `Price deviations [%]`,
+                  `Trend direction - price change per day`) %>% 
+    mutate(`Trend direction - price change per day [$]` = round(`Trend direction - price change per day`,2),
+           `Median price` = round(`Median price`,2)) %>% 
+    dplyr::select(-`Trend direction - price change per day`),
+  align = c("r", rep("l",3)),
+            list(`Analyzed period: days back` = formatter("span", 
+                                 style = ~ style(color = "black", 
+                                                 font.weight = "bold")),
+                `Median price`  = stock$imp_formatters$medp,
+`Price deviations [%]` = stock$imp_formatters$sd,
+`Trend direction - price change per day [$]` = improvement_formatter)
+)
+```
+
+
+Column 3{.tabset}
+-------------------------------------
+
+### XGBoost
+
+```{r xgb1, echo=FALSE,  warning=FALSE, message=FALSE}
+plotly::ggplotly(
+xgbData$forecasts %>% 
+  filter(dateTime >= Sys.Date()-lubridate::days(30)) %>% 
+  rename(`Stock price` = actual) %>% 
+  mutate(horizon = ifelse(horizon == "actual",
+                          "historical data",
+                          "forecasted data")) %>% 
+  ggplot(aes(x = dateTime)) + 
+  geom_point(aes(y = `Stock price`,
+                 label = signals,
+                 label1 = up,
+                 label2 = down,
+                 color = horizon)) +
+    geom_line(aes(y = `Stock price`)) +
+  theme(legend.position="none") +
+  labs(title = "XGB predictions",
+       x = "",
+       y = "Stock Price")  +
+  scale_color_manual(values=c("#15BCF0", "#6B767A"))
+)
+# xgbData$xgboost_test_accuracy <- xgbData$forecast %>% 
+#   filter(!is.na(prediction)) %>% 
+#   dplyr::select(prediction, V1_close, absolute_error,
+#                 absolute_percentage_error) %>% 
+#   mutate(accuracy = round(prediction / V1_close, 6)) %>% 
+#   summarise(accuracy = round(mean(abs(absolute_percentage_error)),4),
+#             accuracy = 1 - accuracy) %>% 
+#   pull()
+```
+
+### XGB features
+
+<br>
+Predicting *log_actual*
+<br>
+```{r xgb2, echo=FALSE,  warning=FALSE, message=FALSE}
+
+formattable(
+  data.frame(variables = colnames(mmtData$xgbData$train_base)),
+  align = c("l"))
+```
+
+
+### `r paste("Last", n_distinct(data$full$date), "days distribution.")`
+
+```{r distribution, echo=FALSE,  warning=FALSE, message=FALSE}
+ggplot(data$full %>% 
+         rename(`Close price` = close), 
+       aes(x=`Close price`)) + 
+    geom_histogram(aes(y=..density..),      # Histogram with density instead of count on y-axis
+                   binwidth=.5,
+                   colour="black", fill="white") +
+    geom_density(alpha=.2, fill="#FF6666") +
+  labs(title = paste(min(data$full$date),
+                        "-", max(data$full$date)), 
+       subtitle = paste( 
+                        "Detected",
+                        nrow(data$full), "price values."))
+dens_tmp <- stt$daily_df$av  %>% 
+         filter(date >= "2017-01-01")
+```
+
+
+### Outliers
+
+```{r anomalies info, echo=FALSE,  warning=FALSE, message=FALSE}
+#plotly::ggplotly(
+stt$daily_df$av %>% 
+  filter(date >= Sys.Date()-1000) %>% 
+  dplyr::select(date, Close)  %>%
+  as_tibble() %>% 
+    anomalize::time_decompose(Close) %>%
+    anomalize::anomalize(remainder) %>%
+    anomalize::plot_anomaly_decomposition() +
+    labs(title = "Price decomposition")
+#)
+```
+
+
+Historical prices {data-icon="fa-chart-bar"}
+=====================================     
+
+```{r indtradaymodels_dt , echo=FALSE, warning=FALSE, message=FALSE}
+DT::datatable(stt$summary$intraday %>% 
+                renameSummary2(),
+  filter = "top",
+  rownames = FALSE) %>% 
+ DT::formatStyle(
+    names(stt$summary$intraday %>% 
+                renameSummary2())[2],
+    backgroundColor = DT::styleInterval(
+      color_table_points(stt$summary$intraday%>% 
+                renameSummary2(),
+                        names(stt$summary$intraday %>% 
+                renameSummary2())[2]),
+      color_table(stt$summary$intraday%>% 
+                renameSummary2(),
+                names(stt$summary$intraday %>% 
+                renameSummary2())[2]))) %>% 
+   DT::formatStyle(
+    names(stt$summary$intraday %>% 
+                renameSummary2())[3],
+    backgroundColor = DT::styleInterval(
+      color_table_points(stt$summary$intraday%>% 
+                renameSummary2(),
+                        names(stt$summary$intraday %>% 
+                renameSummary2())[3]),
+      color_table(stt$summary$intraday%>% 
+                renameSummary2(),
+                names(stt$summary$intraday %>% 
+                renameSummary2())[3]))) %>%  
+  DT::formatStyle(
+    names(stt$summary$intraday %>% 
+                renameSummary2())[4],
+    backgroundColor = DT::styleInterval(
+      color_table_points(stt$summary$intraday%>% 
+                renameSummary2(),
+                        names(stt$summary$intraday %>% 
+                renameSummary2())[4]),
+      color_table(stt$summary$intraday%>% 
+                renameSummary2(),
+                names(stt$summary$intraday %>% 
+                renameSummary2())[4]))) %>%  
+  DT::formatStyle(
+    names(stt$summary$intraday %>% 
+                renameSummary2())[5],
+    backgroundColor = DT::styleInterval(
+      color_table_points(stt$summary$intraday%>% 
+                renameSummary2(),
+                        names(stt$summary$intraday %>% 
+                renameSummary2())[5]),
+      color_table(stt$summary$intraday%>% 
+                renameSummary2(),
+                names(stt$summary$intraday %>% 
+                renameSummary2())[5]))) %>% 
+   DT::formatStyle(
+    names(stt$summary$intraday %>% 
+                renameSummary2())[6],
+    backgroundColor = DT::styleInterval(
+      color_table_points(stt$summary$intraday%>% 
+                renameSummary2(),
+                        names(stt$summary$intraday %>% 
+                renameSummary2())[6]),
+      color_table(stt$summary$intraday%>% 
+                renameSummary2(),
+                names(stt$summary$intraday %>% 
+                renameSummary2())[6]))) %>% 
+   DT::formatStyle(
+    names(stt$summary$intraday %>% 
+                renameSummary2())[7],
+    backgroundColor = DT::styleInterval(
+      color_table_points(stt$summary$intraday%>% 
+                renameSummary2(),
+                        names(stt$summary$intraday %>% 
+                renameSummary2())[7]),
+      color_table(stt$summary$intraday%>% 
+                renameSummary2(),
+                names(stt$summary$intraday %>% 
+                renameSummary2())[7]))) 
+```

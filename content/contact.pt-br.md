@@ -1,6 +1,6 @@
 ---
 slug: contact
-title: Contato
+title: Kontakt
 ---
 
-Me siga em @joaoninguem.
+email: bdmp.corp@gmail.com

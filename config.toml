@@ -1,5 +1,5 @@
-baseURL = "http://www.example.com"
-title = "johndoe"
+baseURL = "https://mamut.netlify.app/"
+title = "mamut"
 
 theme = "hugo-coder"
 
@@ -15,13 +15,11 @@ pygmentsCodeFencesGuessSyntax = true
 disqusShortname = "yourdiscussshortname"
 
 [params]
-    author = "John Doe"
-    description = "John Doe's personal website"
-    keywords = "blog,developer,personal"
-    info = "Full Stack DevOps and Magician"
-    avatarURL = "images/avatar.jpg"
+    author = ""
+    info = ""
+    avatarURL = "images/test1.jpg"
     #gravatar = "john.doe@example.com"
-    footerContent = "Enter a text here."
+    footerContent = "Have a great day!"
 
     dateFormat = "January 2, 2006"
 
@@ -40,7 +38,7 @@ disqusShortname = "yourdiscussshortname"
     # "auto" (use preference set by browser)
     # "dark" (dark background, light foreground)
     # "light" (light background, dark foreground) (default)
-    colorScheme = "auto"
+    colorScheme = "light"
 
     # Hide the toggle button, along with the associated vertical divider
     hideColorSchemeToggle = false
@@ -90,55 +88,27 @@ disqusShortname = "yourdiscussshortname"
     name = "Github"
     icon = "fa fa-github"
     weight = 1
-    url = "https://github.com/johndoe/"
-[[params.social]]
-    name = "Gitlab"
-    icon = "fa fa-gitlab"
-    weight = 2
-    url = "https://gitlab.com/johndoe/"
-[[params.social]]
-    name = "Twitter"
-    icon = "fa fa-twitter"
-    weight = 3
-    url = "https://twitter.com/johndoe/"
+    url = "https://github.com/bdmpcorp/"
 [[params.social]]
     name = "LinkedIn"
     icon = "fa fa-linkedin"
     weight = 4
-    url = "https://www.linkedin.com/in/johndoe/"
-[[params.social]]
-    name = "Medium"
-    icon = "fa fa-medium"
-    weight = 5
-    url = "https://medium.com/@johndoe"
-[[params.social]]
-    name = "RSS"
-    icon = "fa fa-rss"
-    weight = 6
-    url = "https://myhugosite.com/index.xml"
-    rel = "alternate"
-    type = "application/rss+xml"
-
+    url = "https://pl.linkedin.com/organization-guest/company/bdmp-corp/"
 
 [languages]
     [languages.en]
         languageName = "English"
 
         [languages.en.menu]
-
+        
             [[languages.en.menu.main]]
-            name = "About"
+            name = "Reports"
             weight = 1
-            url = "about/"
-
-            [[languages.en.menu.main]]
-            name = "Blog"
-            weight = 2
             url = "posts/"
-
+        
             [[languages.en.menu.main]]
-            name = "Projects"
-            weight = 3
+            name = "Description"
+            weight = 2
             url = "projects/"
 
             [[languages.en.menu.main]]
@@ -148,34 +118,24 @@ disqusShortname = "yourdiscussshortname"
 
 
     [languages.pt-br]
-        languageName = "Português"
-        title = "João Ninguém"
+        languageName = "Polski"
+        title = "Mamut"
 
         [languages.pt-br.params]
-            author = "João Ninguém"
-            info = "Full Stack DevOps e Mágico"
-            description = "Sítio pessoal de João Ninguém"
-            keywords = "blog,desenvolvedor,pessoal"
-            footerContent = "Coloque algum texto aqui."
+            author = ""
+            info = ""
+            description = ""
+            keywords = ""
+            footerContent = "Miłego dnia!"
 
         [languages.pt-br.menu]
-
+        
             [[languages.pt-br.menu.main]]
-            name = "Sobre"
-            weight = 1
-            url = "about/"
-
-            [[languages.pt-br.menu.main]]
-            name = "Blog"
+            name = "Opis"
             weight = 2
-            url = "posts/"
-
-            [[languages.pt-br.menu.main]]
-            name = "Projetos"
-            weight = 3
             url = "projects/"
 
             [[languages.pt-br.menu.main]]
-            name = "Contato"
+            name = "Kontakt"
             weight = 5
             url = "contact/"

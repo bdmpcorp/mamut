@@ -1,6 +1,5 @@
 ---
 slug: projects
-title: Projects
+title: Reports
 ---
 
-Nothing to see here... Move along!

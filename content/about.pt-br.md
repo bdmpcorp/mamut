@@ -3,4 +3,4 @@ slug: about
 title: Sobre Hugo
 ---
 
-Em construção... Aguarde!
+!Em construção... Aguarde

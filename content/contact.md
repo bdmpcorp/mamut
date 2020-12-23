@@ -3,4 +3,4 @@ slug: contact
 title: Contact
 ---
 
-Follow me, @johndoe.
+email: bdmp.corp@gmail.com
