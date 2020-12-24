@@ -1,17 +1,8 @@
 ---
-title: Demo
-author: Mamut
-date: '2020-12-24'
-slug: []
-categories:
-  - R
-tags:
-  - R Markdown
-  - hugo
-authors: []
-description: ''
-externalLink: ''
-series: []
+date: "2020-12-24T01:03:56+01:00"
+draft: true
+slug: ""
+title: ""
 ---
 
 ```{r setup, include=FALSE}
