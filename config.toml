@@ -104,7 +104,7 @@ disqusShortname = "yourdiscussshortname"
             [[languages.en.menu.main]]
             name = "Reports"
             weight = 1
-            url = "posts/"
+            url = "post/"
         
             [[languages.en.menu.main]]
             name = "Description"
