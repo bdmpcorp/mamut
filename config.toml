@@ -104,7 +104,7 @@ disqusShortname = "yourdiscussshortname"
             [[languages.en.menu.main]]
             name = "Reports"
             weight = 1
-            url = "post/"
+            url = "posts/"
         
             [[languages.en.menu.main]]
             name = "Description"
@@ -134,7 +134,7 @@ disqusShortname = "yourdiscussshortname"
             name = "Opis"
             weight = 2
             url = "projects/"
-
+            
             [[languages.pt-br.menu.main]]
             name = "Kontakt"
             weight = 5
