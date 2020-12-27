@@ -1,5 +1,5 @@
 ---
 slug: projects
-title: Reports
+title: Description
 ---
 
