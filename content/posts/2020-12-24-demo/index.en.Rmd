@@ -95,7 +95,7 @@ prov_det <- dt1 %>%
   ungroup()
 ```
 
-### Last signals
+## Last signals {.tabset}
 ```{r signalslast1, echo=FALSE, warning=FALSE, message=FALSE}
 formattable(
   dt1 %>% 
@@ -176,7 +176,7 @@ tstst %>%
  
 ```
 
-### Last signals
+### Table
 ```{r last signals, echo = F, warning=F, message=F}
 formattable(
 dtt1 %>% 
@@ -232,6 +232,7 @@ probabilty
 </div>
 </div>
 
+
 ### NLP `r paste("Last signals:", sum(dt2$Signals))`
 ```{r tfsignals, echo=FALSE, warning=FALSE, message=FALSE}
 plotly::ggplotly(
@@ -255,6 +256,16 @@ dt2 %>%
 )
 ```
 
+
+### Available articles
+```{r articles, echo = F, warning=F, message=F}
+# table with articles
+DT::datatable(tmp_clean ,
+              filter = "top",
+  rownames = FALSE)
+```
+
+## Price Analysis {.tabset}
 ### Forecast
 ```{r xgb1, echo=FALSE,  warning=FALSE, message=FALSE}
 plotly::ggplotly(
@@ -291,13 +302,7 @@ DT::datatable(stt$financial_statement$yahoo,
   )) 
 ```
 
-### Available articles
-```{r articles, echo = F, warning=F, message=F}
-# table with articles
-DT::datatable(tmp_clean ,
-              filter = "top",
-  rownames = FALSE)
-```
+
 
 ### Historical prices
 ```{r indtradaymodels_dt , echo=FALSE, warning=FALSE, message=FALSE}
