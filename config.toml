@@ -102,7 +102,7 @@ disqusShortname = "yourdiscussshortname"
         [languages.en.menu]
         
             [[languages.en.menu.main]]
-            name = "Reports"
+            name = "Demo"
             weight = 1
             url = "posts/"
         
@@ -117,25 +117,30 @@ disqusShortname = "yourdiscussshortname"
             url = "contact/"
 
 
-    [languages.pt-br]
+    [languages.pl]
         languageName = "Polski"
         title = "Mamut"
 
-        [languages.pt-br.params]
+        [languages.pl.params]
             author = ""
             info = ""
             description = ""
             keywords = ""
             footerContent = "Miłego dnia!"
 
-        [languages.pt-br.menu]
+        [languages.pl.menu]
         
-            [[languages.pt-br.menu.main]]
+            [[languages.pl.menu.main]]
+            name = "Demo"
+            weight = 1
+            url = "pl/posts/"
+        
+            [[languages.pl.menu.main]]
             name = "Opis"
             weight = 2
             url = "projects/"
             
-            [[languages.pt-br.menu.main]]
+            [[languages.pl.menu.main]]
             name = "Kontakt"
             weight = 5
             url = "contact/"

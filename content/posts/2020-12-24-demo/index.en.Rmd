@@ -386,7 +386,13 @@ DT::datatable(stt$summary$intraday %>%
 
 Report ID:
 
+
 `r stock$render$reportName`
+
 `r stock$render$dataStamp`
+
 [link to SignalsHub](https://mamut.shinyapps.io/providers/)
+
+
+
 

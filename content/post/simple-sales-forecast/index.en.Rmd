@@ -1,0 +1,500 @@
+---
+title: Simple sales forecast
+author: Mamut
+date: '2020-12-29'
+slug: []
+categories:
+  - R
+tags:
+  - R Markdown
+---
+
+```{r setup and load, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(tidyverse)
+library(forecast)
+data <- list()
+data$raw <- read.csv2("data.csv", stringsAsFactors = FALSE, sep = ",") %>% 
+  janitor::clean_names()
+data$timeseries <- cbind(product_code = data$raw$product_code,
+                         data$raw %>% 
+  select(colnames(data$raw[str_detect(colnames(data$raw), "w")])))
+data$timeseries_clean <- data$timeseries %>% 
+  filter(product_code %in% data$timeseries$product_code[1:10]) %>% 
+  gather(week, value, -product_code) %>% 
+  mutate(week_n = as.numeric(str_remove(week, "w"))+1)
+```
+
+# {.tabset .tabset-fade .tabset-pills}
+
+```{r data processing 1, echo=FALSE, warning=FALSE, message=FALSE}
+data$prods_summary <- data$timeseries_clean %>% 
+  group_by(product_code) %>% 
+  summarise(`Sales value` = sum(value),
+            `Number of weeks` = n(),
+            `Sales per week` = round(`Sales value` / n(),2 )) %>% 
+  ungroup() %>% 
+  mutate(product_code = fct_reorder(product_code, `Sales value`)) %>% 
+  rename(`Product code` = product_code) %>% 
+  arrange(desc(`Product code`))
+
+data$prods_all <- data$prods_summary %>% 
+  summarise(`Sales value` = sum(`Sales value`),
+            `Number of weeks` = max(`Number of weeks`),
+            `Sales per week` = sum(`Sales per week`))
+```
+```{r data processing2, include=FALSE}
+data$timeseries2 <- data$timeseries_clean %>% 
+  group_by(week_n) %>% 
+  summarise(`Sales value` = sum(value),
+            `Average product sales value` = round(mean(value),2),
+            `Number of products` = n_distinct(product_code)) %>% 
+  ungroup() %>% 
+  rename(Week = week_n)
+```
+
+
+```{r data modelling engine, echo=FALSE, include=FALSE}
+data$arima <- list()
+data$arima$raw <- data$timeseries_clean %>% 
+  group_by(product_code) %>% 
+  mutate(model_type = ifelse(week_n > quantile(week_n, .75), "test", "train"),
+         value_log = ifelse(value > 0, log(value), 0)) %>% 
+  ungroup() 
+
+data$models <- list()
+data$models$prods <- data.frame()
+data$models$all_data <- data.frame()
+ 
+for(i in 1:length(unique(data$timeseries_clean$product_code))){
+  
+  
+  table_train <- data$arima$raw %>% 
+    filter(product_code == unique(data$timeseries_clean$product_code)[i],
+           model_type == "train") 
+  
+  
+  data$arima$raw
+  
+  
+  table_test <- data$arima$raw %>% 
+    filter(product_code == unique(data$timeseries_clean$product_code)[i],
+           model_type == "test")
+  
+  autoarima <- auto.arima(ts(table_train$value_log))
+  forecast <- forecast(autoarima, h = nrow(table_test))
+  
+  s <- table_train %>% 
+    arrange(week_n) %>% 
+    mutate(value_cs = cumsum(value))
+  
+ value_cs <- max(s$value_cs)
+ 
+  table_test2 <- table_test %>% 
+    mutate(arima_mean = exp(as.numeric(forecast$mean)),
+           arima_upp80 = exp(as.numeric(forecast$upper[,1])),
+           arima_low80 =  exp(as.numeric(forecast$lower[,1])),
+           arima_score = round(value - arima_mean, 2),
+           lm_value = round(lm(table_train$value ~ table_train$week_n)$coeff[2] * week_n + lm(table_train$value ~ table_train$week_n)$coeff[1],2),
+           lm_score = round(value - lm_value, 2),
+           s_value = round(lm(s$value_cs ~ table_train$week_n)$coeff[2],2),
+           s_score = round(value - s_value, 2))
+  
+  table_test_summary <- table_test2 %>% 
+    summarise(product_code =unique(data$timeseries_clean$product_code)[i],
+              weeks = n(),
+              value_sum = sum(value),
+              arima_mean_sum = sum(arima_mean),
+              lm_mean_sum = sum(lm_value),
+              s_mean_sum = sum(s_value),
+              arima_score = round(mean(arima_score),2),
+              lm_score = round(mean(lm_score),2),
+              s_score = round(mean(s_score),2))
+
+  table_scores <- tibble(method = c("arima", "lm", "s"),
+    score = c(abs(table_test_summary$arima_score),
+    lm_scores = abs(table_test_summary$lm_score),
+    s_scores = abs(table_test_summary$s_score))
+  ) %>% 
+    arrange(score) %>% 
+    head(1)
+  table_summary2 <- table_test_summary %>% 
+    select(product_code, weeks, value_sum, 
+           colnames(table_test_summary)[which(str_detect(colnames(table_test_summary), paste(table_scores$method, "_", sep = "")))]) %>% 
+    mutate(method = table_scores$method)
+    
+  colnames(table_summary2) <- c("product_code", "weeks", "value_sum",
+                                "predicted_value_sum", "correction", "method" )
+  
+  data$models$prods <- rbind(data$models$prods, table_summary2)
+  print(paste(round(i/length(unique(data$timeseries_clean$product_code))*100,2), "%",
+              sep = ""))
+  data$models$all_data <- rbind(data$models$all_data, table_test2)
+  rm(i, value_cs, autoarima, s, table_scores, table_summary2, table_test, table_test2,
+     table_train, forecast, table_test_summary)
+        }
+
+## scores
+#data$models$all_data %>% 
+#  ggplot() +
+#  geom_histogram(aes(s_score))
+#  geom_histogram(aes(arima_score)) + 
+#  geom_histogram(aes(lm_score)) + 
+#  geom_histogram(aes(s_score))
+
+data$models$all_data_s <- data$models$all_data %>% 
+  group_by(value) %>% 
+  summarise(n_prods = n_distinct(product_code),
+            time = n_distinct(week),
+            arima_mean = round(mean(arima_mean),2),
+            lm_value = round(mean(lm_value),2),
+            s_value = round(mean(s_value),2),
+            arim_s = round(mean(arima_score),2),
+            lm_s = round(mean(lm_score),2),
+            s_s = round(mean(s_score),2))
+data$models$summary <- data$models$all_data %>% 
+  group_by(product_code) %>% 
+  summarise(value = sum(value),
+            weeks = n_distinct(week_n),
+            arima_sum = round(sum(arima_mean)),
+            lm_sum = round(sum(lm_value)),
+            s_sum = round(sum(s_value))) %>% 
+  ungroup() %>% 
+  left_join(data$models$prods %>% 
+              select(product_code, predicted_value_sum, method) %>% 
+              mutate(predicted_value_sum = round(predicted_value_sum))) 
+
+```
+```{r forecast engine, echo=FALSE, include=FALSE}
+data$arima <- list()
+data$arima$raw <- data$timeseries_clean %>% 
+  group_by(product_code) %>% 
+  mutate(value_log = ifelse(value > 0, log(value), 0)) %>% 
+  ungroup() 
+data$forecast <- list()
+data$forecast$prods <- data.frame()
+data$forecast$all_data <- data.frame()
+for(i in 1:length(unique(data$timeseries_clean$product_code))){
+  table_train <- data$arima$raw %>% 
+    filter(product_code == unique(data$timeseries_clean$product_code)[i]) 
+  
+  autoarima <- auto.arima(ts(table_train$value_log))
+  forecast <- forecast(autoarima, h = 7)
+  s <- table_train %>% 
+    arrange(week_n) %>% 
+    mutate(value_cs = cumsum(value))
+ value_cs <- max(s$value_cs)
+  table_test <- data$arima$raw %>% 
+    filter(product_code == unique(data$timeseries_clean$product_code)[i])
+  
+  forecast_table <- tibble(product_code = unique(data$timeseries_clean$product_code)[i],
+                           value = NA,
+                           week_n = (max(table_train$week_n)+1):((max(table_train$week_n)+7))
+                           )
+  table_test2 <- forecast_table %>% 
+    mutate(arima_mean = exp(as.numeric(forecast$mean)),
+           arima_upp80 = exp(as.numeric(forecast$upper[,1])),
+           arima_low80 =  exp(as.numeric(forecast$lower[,1])),
+           lm_value = round(lm(table_train$value ~ table_train$week_n)$coeff[2] * week_n + lm(table_train$value ~ table_train$week_n)$coeff[1],2),
+           s_value = round(lm(s$value_cs ~ table_train$week_n)$coeff[2],2))
+  
+  table_test_summary <- table_test2 %>% 
+    summarise(product_code =unique(data$timeseries_clean$product_code)[i],
+              weeks = n(),
+              arima_mean_sum = round(sum(arima_mean)),
+              lm_mean_sum = round(sum(lm_value)),
+              s_mean_sum = round(sum(s_value)))
+  
+  previous_best <- data$models$prods %>% 
+    filter(product_code == unique(data$timeseries_clean$product_code)[i])
+
+  previous_best_c <- colnames(table_test_summary)[which(str_detect(colnames(table_test_summary), paste(previous_best$method, "_", sep = "")))]
+  
+  table_summary2 <- table_test_summary %>% 
+    select(product_code, weeks, 
+           colnames(table_test_summary)[which(str_detect(colnames(table_test_summary), paste(previous_best$method, "_", sep = "")))]) %>% 
+    mutate(method = previous_best_c)
+    
+  colnames(table_summary2) <- c("product_code", "weeks",
+                                "predicted_value_sum", "method" )
+  
+  data$forecast$prods <- rbind(data$forecast$prods, table_summary2)
+  print(paste(round(i/length(unique(data$timeseries_clean$product_code))*100,2), "%",
+              sep = ""))
+  data$forecast$all_data <- rbind(data$forecast$all_data, table_test2)
+  rm(i, value_cs, autoarima, s, table_summary2, table_test, table_test2,
+     table_train, forecast, table_test_summary, 
+     previous_best_c, previous_best, forecast_table)
+}
+
+data$forecast$summary <- data$forecast$all_data %>% 
+  group_by(product_code) %>% 
+  summarise(weeks = n_distinct(week_n),
+            arima_sum = round(sum(arima_mean)),
+            lm_sum = round(sum(lm_value)),
+            s_sum = round(sum(s_value))) %>% 
+  ungroup() %>% 
+  left_join(data$forecast$prods %>% 
+              select(product_code, predicted_value_sum, method) %>% 
+              mutate(predicted_value_sum = round(predicted_value_sum))) %>% 
+  select(product_code,weeks, predicted_value_sum, method, 
+         arima_sum, lm_sum, s_sum) %>% 
+  mutate(method = str_replace_all(method, "_mean_sum", "")) %>% 
+  rename(`Product code` = product_code,
+         Weeks = weeks,
+         `Suggested prediction` = predicted_value_sum,
+         `Test best method` = method,
+         `ARIMA prediction` = arima_sum,
+         `Linear model prediction` = lm_sum,
+         `S prediction` = s_sum)
+
+data$forecast$summary2 <- data$forecast$all_data %>% 
+  group_by(product_code, week_n) %>% 
+  summarise(arima = round(sum(arima_mean)),
+            lm = round(sum(lm_value)),
+            s = round(sum(s_value))) %>% 
+  ungroup() %>% 
+left_join(data$forecast$summary %>% 
+            rename(product_code = `Product code`) %>% 
+            select(product_code, `Test best method`)) %>% 
+  mutate(best_v = ifelse(`Test best method` == "lm", lm,
+                         ifelse(`Test best method` == "arima", arima,
+                                ifelse(`Test best method` == "s", s, NA))))
+
+```
+```{r last7 engine, include=FALSE}
+data$last7 <- list()
+data$last7$raw <-  data$models$all_data %>% 
+  filter(week_n >= max(week_n)-6) %>% 
+  group_by(product_code) %>% 
+  summarise(value = sum(value),
+            n_weeks = n_distinct(week))
+
+data$last7$timeseries2 <- data$timeseries2 %>% 
+  filter(Week >= max(Week)-6)
+data$last7$timeseries_clean <- data$timeseries_clean %>% 
+  filter(week_n >= max(week_n)-6)
+
+
+```
+
+## General stats
+
+<center>
+```{r general stats table, echo=FALSE, warning=FALSE, message=FALSE}
+formattable::formattable(data$prods_all)
+```
+
+```{r sales by products chart, echo=FALSE, warning=FALSE, message=FALSE}
+plotly::ggplotly(data$prods_summary %>% 
+  ggplot(aes(`Product code`, `Sales value`, fill = `Sales per week`))+
+  geom_col() + 
+  coord_flip() + 
+    labs(title = "Sales by products [sum]"))
+```
+
+```{r timeseries charts, echo=FALSE, warning=FALSE, message=FALSE}
+plotly::ggplotly(
+data$timeseries2 %>% 
+  mutate( `Sales value moving average - 4 weeks` = ma(`Sales value`, 4)) %>% 
+  ggplot(aes(Week, label = `Number of products` )) + 
+  geom_line(aes(y =  `Sales value`)) +
+  geom_point(aes(y =  `Sales value moving average - 4 weeks`)) +
+  geom_smooth(aes(y =  `Sales value`), method = "lm") + 
+  labs(title = "Sales in time")
+)
+plotly::ggplotly(
+data$timeseries_clean %>% 
+   group_by(week_n) %>% 
+  mutate(`Sales value` = sum(value),
+            `Average product sales value` = round(mean(value),2),
+            `Number of products` = n_distinct(product_code)) %>% 
+  ungroup() %>% 
+  rename(Week = week_n) %>% 
+  rename(`Product code` = product_code,
+         `Sales value per product` = value) %>% 
+  ggplot(aes(Week )) + 
+  geom_col(aes(y =  `Sales value per product`, fill = `Product code`))+ 
+  labs(y = "Sales value",
+       title = "Sales in time by products")
+)
+plotly::ggplotly(
+data$timeseries_clean %>% 
+  rename(`Product code` = product_code,
+         Week = week_n,
+         `Sales value` = value) %>% 
+  ggplot(aes(Week, `Sales value`, color = `Product code`)) +
+  geom_smooth(method = "lm") +
+  labs(title = "Trends by products")
+)
+```
+</center>
+
+
+## Last 7 weeks
+<center>
+```{r previous 7 table, echo=FALSE, warning=FALSE, message=FALSE}
+formattable::formattable(data$last7$raw %>% 
+                           summarise(`Sales value` = sum(value),
+                                     `Number of weeks` = unique(n_weeks),
+                                     `Sales per week` = round(`Sales value`/`Number of weeks`,1)))
+```
+
+```{r previous 7 plot, echo=FALSE, warning=FALSE, message=FALSE}
+plotly::ggplotly(data$last7$raw %>% 
+                   mutate(`Sales per week` = round(value/n_weeks),
+                          product_code = fct_reorder(product_code, value)) %>% 
+                   rename(`Product code` = product_code,
+                          `Sales value` = value) %>% 
+  ggplot(aes(`Product code`, `Sales value`, fill = `Sales per week`))+
+  geom_col() + 
+  coord_flip() + 
+    labs(title = "Sales by products - last 7 days"))
+
+
+plotly::ggplotly(
+data$last7$timeseries2 %>% 
+  mutate( `Sales value moving average - 2 weeks` = ma(`Sales value`, 2)) %>% 
+  ggplot(aes(Week, label = `Number of products` )) + 
+  geom_line(aes(y =  `Sales value`)) +
+  geom_point(aes(y =  `Sales value moving average - 2 weeks`)) +
+  geom_smooth(aes(y =  `Sales value`), method = "lm") + 
+  labs(title = "Last 7 weeks sales")
+)
+
+plotly::ggplotly(
+data$last7$timeseries_clean %>% 
+   group_by(week_n) %>% 
+  mutate(`Sales value` = sum(value),
+            `Average product sales value` = round(mean(value),2),
+            `Number of products` = n_distinct(product_code)) %>% 
+  ungroup() %>% 
+  rename(Week = week_n) %>% 
+  rename(`Product code` = product_code,
+         `Sales value per product` = value) %>% 
+  ggplot(aes(Week )) + 
+  geom_col(aes(y =  `Sales value per product`, fill = `Product code`))+ 
+  labs(y = "Sales value",
+       title = "Last 7 weeks by products")
+)
+
+#plotly::ggplotly(
+#data$last7$timeseries_clean %>% 
+#  rename(`Product code` = product_code,
+#         Week = week_n,
+#         `Sales value` = value) %>% 
+#  ggplot(aes(Week, `Sales value`, color = `Product code`)) +
+#  geom_smooth(method = "lm") +
+#  labs(title = "Last 7 weeks trends")
+#)
+```
+
+</center>
+## Forecast 7 weeks
+<center>
+```{r forecast summary, echo=FALSE, warning=FALSE, message=FALSE}
+formattable::formattable(data$forecast$summary %>% 
+  summarise(`Mixed prediction value` = sum(`Suggested prediction`),
+            Weeks = unique(Weeks),
+            `Sales per week` = round(`Mixed prediction value` /Weeks),
+            `Methods used` = paste(unique(`Test best method`), collapse = ", ")))
+
+formattable::formattable(
+data$forecast$summary %>% 
+  summarise(`Mixed prediction value` = sum(`Suggested prediction`),
+            `Methods used` = paste(unique(`Test best method`), collapse = ", "),
+            `ARIMA prediction` = sum(`ARIMA prediction`),
+            `Linear model prediction` = sum(`Linear model prediction`),
+            `S prediction` = sum(`S prediction`))
+)
+
+
+
+```
+
+```{r forecast plot, echo=FALSE, warning=FALSE, message=FALSE}
+plotly::ggplotly(data$forecast$prods %>% 
+  mutate(method = str_remove_all(method, "_mean_sum")) %>% 
+  rename(value = predicted_value_sum) %>% 
+  mutate(`Sales per week` = round(value/weeks)) %>% 
+                   mutate(product_code = fct_reorder(product_code, value)) %>% 
+                   rename(`Product code` = product_code,
+                          `Sales prediction` = value,
+                          `Method used` = method) %>% 
+  ggplot(aes(`Product code`, `Sales prediction`, fill = `Sales per week`,
+             label = `Method used`))+
+  geom_col() + 
+  coord_flip() + 
+    labs(title = "Sales by products - forecast 7 days"))
+
+
+```
+
+```{r forecast table, echo=FALSE, warning=FALSE, message=FALSE}
+DT::datatable(data$forecast$summary %>% 
+  left_join(data$last7$raw %>% 
+              rename(`Product code` = product_code,
+                     `Last 7 weeks value` = value) %>% 
+              select(-n_weeks)) %>% 
+  mutate(Change = round((`Suggested prediction` -`Last 7 weeks value`)/`Suggested prediction`,2)) %>% 
+    rename(`Forecast 7 weeks` = `Suggested prediction`) %>% 
+           select(-`Test best method`, -`ARIMA prediction`, -`Linear model prediction`,
+                  -`S prediction`, -Weeks),
+  rownames = FALSE,
+  filter = "top")
+
+DT::datatable(data$forecast$summary %>% 
+                mutate(`Test best method` = factor(`Test best method`)),
+              rownames = FALSE,
+              filter = "top")
+
+```
+
+
+
+</center>
+## Model test data
+
+Train[75%] - Test[25%] <br>
+Test data contains `r unique(data$models$summary$weeks)` last weeks.
+<br>
+<br>
+
+<center>
+```{r models used table, echo=FALSE, warning=FALSE, message=FALSE}
+DT::datatable(
+data$models$summary %>% 
+  mutate(method = factor(method)) %>% 
+  rename(`Product code` = product_code,
+         Weeks = weeks,
+         `Sales value` = value,
+         `Best prediction` = predicted_value_sum,
+         `Best prediction method` = method,
+         `ARIMA forecast` = arima_sum,
+         `Linear model forecast` = lm_sum,
+         `S forecast` = s_sum),
+filter = "top",
+rownames = FALSE
+)
+
+```
+
+```{r models precision plot, echo=FALSE, warning=FALSE, message=FALSE}
+plotly::ggplotly(
+data$models$all_data %>% 
+  rename(`Sales value` = value,
+         `Product code` = product_code,
+         Week = week_n,
+         `Forecast method: ARIMA - mean level` =arima_mean,
+         `Forecast method: Linear model` = lm_value,
+         `Forecast method: S` = s_value) %>% 
+  ggplot(aes(x = `Sales value`, color =  `Product code`, label = Week)) + 
+  geom_point(aes(y = `Forecast method: ARIMA - mean level`, group = `Sales value`)) + 
+  geom_point(aes(y = `Forecast method: Linear model`, group = `Sales value`)) +
+  geom_point(aes(y = `Forecast method: S`, group = `Sales value`)) +
+  geom_line(aes(y = `Sales value`)) +
+  labs(y = "Predicted sales value",
+       title = "Model test")
+)
+```
+</center>
